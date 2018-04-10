@@ -70,6 +70,9 @@ class ThreadedServer(object):
                     elif data["op"] == "del-key":
                         self.delete_key(client, data["data"])
 
+                    elif data["op"] == "set-hash":
+                        self.set_hash(client, data["data"])
+
                 else:
                     raise RuntimeError
 
@@ -87,6 +90,19 @@ class ThreadedServer(object):
     @staticmethod
     def random_id():
         return str(uuid.uuid4())
+
+    def set_hash(self, client, data):
+        session = data["session"]
+        if session not in self.sessions:
+            self.send_user(client, self.phrase_output("failed", {"error": "you are not logged in"}))
+            return False
+
+        user = self.sessions[session]
+        key_id = data["key-id"]
+        key = self.users[user]["bash"].pop("unsorted")
+        self.users[user]["bash"][key_id] = key
+        self.update_json()
+        self.send_user(client, self.phrase_output("ok", {"message": "IDed the key"}))
 
     def delete_key(self, client, data):
         session = data["session"]
@@ -108,9 +124,9 @@ class ThreadedServer(object):
 
         user = self.sessions[session]
         key = self.random_id()
-        key_id = self.random_id()
-        self.users[user]["bash"][key_id] = key
-        self.send_user(client, self.phrase_output("key", {"key": key, "key-id": key_id}))
+        # key_id = self.random_id()
+        self.users[user]["bash"]["unsorted"] = key
+        self.send_user(client, self.phrase_output("key", {"key": key}))  # , "key-id": key_id}))
         self.update_json()
 
     def get_key_with_id(self, client, data):
