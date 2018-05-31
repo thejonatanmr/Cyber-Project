@@ -153,4 +153,11 @@ class Client:
                 print "unknown error, the input was - {}".format(json_data)
 
 
+class RC4Encryption:
+
+    def __init__(self, key):
+        self.key = key
+
+
+
 Client().run
