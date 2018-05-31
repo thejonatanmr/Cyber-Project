@@ -1,8 +1,8 @@
 import json
 import socket
 import ssl
-import queue
 import threading
+import Queue
 import hashlib
 
 
@@ -12,11 +12,11 @@ class Client:
         self.port = port
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.ssl_socket = None
-        self.operations = queue.Queue(maxsize=1)
         self.user = ""
-        self.password = ""
         self.session = ""
+        self.operation_queue = Queue.Queue()
 
+    @property
     def run(self):
         # Require a certificate from the server. We used a self-signed certificate
         # so here ca_certs must be the server certificate itself.
@@ -24,22 +24,23 @@ class Client:
                                                      cert_reqs=ssl.CERT_REQUIRED)
         try:
             ssl_sock.connect((self.server, self.port))
-            # threading.Thread(target=self.input_thread).start()
-            threading.Thread(target=self.server_thread).start()
+
+            threading.Thread(target=self.user_worker).start()
+            threading.Thread(target=self.server_worker).start()
+
         except:
             print "error connecting to the server"
             return False
 
-    # def input_thread(self):
-    #     input = raw_input()
-    #     self.operations.put(self.format_input(input))
-
-    def server_thread(self):
+    def user_worker(self):
         while True:
-            input = raw_input()
-            self.operations.put(self.format_input(input))
-            if self.operations.qsize() >= 1:
-                operation = self.operations.get()
+            raw_in = raw_input()
+            self.format_input(raw_in)
+
+    def server_worker(self):
+        while True:
+            if not self.operation_queue.empty():
+                operation = self.operation_queue.get()
                 formatted_operation = json.loads(operation)
                 if formatted_operation["op"] == "new-user":
                     self.new_user(formatted_operation["user"], formatted_operation["password"])
@@ -59,21 +60,22 @@ class Client:
     @staticmethod
     def help():
         print "The commands are:"
-        print "['login'] - logs you in"
+        print "['login' {user} {password}] - logs you in"
         print "['new-user' {user} {password}] - signs you in"
         print "['encrypt' {file}] - encrypts the file"
         print "['decrypt' {file}] - decrypts the file"
         print "['help'] - list of commands"
 
-    @staticmethod
-    def format_input(string):
+    def format_input(self, string):
         fragmented_input = string.split(" ")
         if len(fragmented_input) == 3:
-            return json.dumps({"op": fragmented_input[0], "user": fragmented_input[1], "password": fragmented_input[2]})
+            formatted_data = json.dumps(
+                {"op": fragmented_input[0], "user": fragmented_input[1], "password": fragmented_input[2]})
         elif len(fragmented_input) == 2:
-            return json.dumps({"op": fragmented_input[0], "file": fragmented_input[1]})
+            formatted_data = json.dumps({"op": fragmented_input[0], "file": fragmented_input[1]})
         else:
-            return json.dumps({"op": fragmented_input[0]})
+            formatted_data = json.dumps({"op": fragmented_input[0]})
+        self.operation_queue.put(formatted_data)
 
     def new_user(self, user, password):
         self.ssl_socket.write(json.dumps({"op": "new-user", "data": {"user": user, "password": password}}))
@@ -83,7 +85,6 @@ class Client:
         if data["op"] == "ok":
             print "new user successfully signed in"
             self.user = user
-            self.password = password
 
     def login(self, user, password):
         self.ssl_socket.write(json.dumps({"op": "login", "data": {"user": user, "password": password}}))
@@ -91,7 +92,7 @@ class Client:
         data = json.loads(json_data)
         if data["op"] == "ok":
             self.session = data["data"]["session id"]
-            print "successfully logged in"
+            print "successfully logged in, the session is {}".format(self.session)
         else:
             if "error" in data["data"]:
                 print data["data"]["error"]
@@ -108,6 +109,7 @@ class Client:
             print "got a new key"
 
             # do encryption
+
             key_id = hashlib.sha512(e_file).hexdigest()
 
             while True:
@@ -151,4 +153,4 @@ class Client:
                 print "unknown error, the input was - {}".format(json_data)
 
 
-Client().run()
+Client().run
