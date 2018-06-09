@@ -4,6 +4,7 @@ import ssl
 import threading
 import Queue
 import hashlib
+import JnEncryption
 
 
 class Client:
@@ -12,7 +13,6 @@ class Client:
         self.port = port
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.ssl_socket = None
-        self.user = ""
         self.session = ""
         self.operation_queue = Queue.Queue()
 
@@ -25,8 +25,9 @@ class Client:
         try:
             ssl_sock.connect((self.server, self.port))
 
-            threading.Thread(target=self.user_worker).start()
+            # threading.Thread(target=self.user_worker).start()
             threading.Thread(target=self.server_worker).start()
+            return True
 
         except:
             print "error connecting to the server"
@@ -39,32 +40,22 @@ class Client:
 
     def server_worker(self):
         while True:
-            if not self.operation_queue.empty():
-                operation = self.operation_queue.get()
-                formatted_operation = json.loads(operation)
-                if formatted_operation["op"] == "new-user":
-                    self.new_user(formatted_operation["user"], formatted_operation["password"])
-
-                elif formatted_operation["op"] == "login":
-                    self.login(formatted_operation["user"], formatted_operation["password"])
-
-                elif formatted_operation["op"] == "encrypt":
-                    self.encrypt(formatted_operation["file"])
-
-                elif formatted_operation["op"] == "decrypt":
-                    self.decrypt(formatted_operation["file"])
-
-                elif formatted_operation["op"] == "help":
-                    self.help()
-
-    @staticmethod
-    def help():
-        print "The commands are:"
-        print "['login' {user} {password}] - logs you in"
-        print "['new-user' {user} {password}] - signs you in"
-        print "['encrypt' {file}] - encrypts the file"
-        print "['decrypt' {file}] - decrypts the file"
-        print "['help'] - list of commands"
+            pass
+        # while True:
+        #     if not self.operation_queue.empty():
+        #         operation = self.operation_queue.get()
+        #         formatted_operation = json.loads(operation)
+        #         if formatted_operation["op"] == "new-user":
+        #             self.new_user(formatted_operation["user"], formatted_operation["password"])
+        #
+        #         elif formatted_operation["op"] == "login":
+        #             self.login(formatted_operation["user"], formatted_operation["password"])
+        #
+        #         elif formatted_operation["op"] == "encrypt":
+        #             self.encrypt(formatted_operation["file"])
+        #
+        #         elif formatted_operation["op"] == "decrypt":
+        #             self.decrypt(formatted_operation["file"])
 
     def format_input(self, string):
         fragmented_input = string.split(" ")
@@ -83,8 +74,9 @@ class Client:
         json_data = self.ssl_socket.read()
         data = json.loads(json_data)
         if data["op"] == "ok":
-            print "new user successfully signed in"
-            self.user = user
+            return True
+        else:
+            return False
 
     def login(self, user, password):
         self.ssl_socket.write(json.dumps({"op": "login", "data": {"user": user, "password": password}}))
@@ -92,12 +84,9 @@ class Client:
         data = json.loads(json_data)
         if data["op"] == "ok":
             self.session = data["data"]["session id"]
-            print "successfully logged in, the session is {}".format(self.session)
+            return True
         else:
-            if "error" in data["data"]:
-                print data["data"]["error"]
-            else:
-                print "unknown error, the input was - {}".format(json_data)
+            return False
 
     def encrypt(self, e_file):
         self.ssl_socket.write(json.dumps({"op": "new-key", "data": {"session": self.session}}))
@@ -108,7 +97,7 @@ class Client:
             curr_key = data["data"]["key"]
             print "got a new key"
 
-            # do encryption
+            enc = JnEncryption(curr_key)
 
             key_id = hashlib.sha512(e_file).hexdigest()
 
@@ -151,13 +140,6 @@ class Client:
                 print data["data"]["error"]
             else:
                 print "unknown error, the input was - {}".format(json_data)
-
-
-class RC4Encryption:
-
-    def __init__(self, key):
-        self.key = key
-
 
 
 Client().run

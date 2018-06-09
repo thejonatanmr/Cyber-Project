@@ -77,7 +77,8 @@ class ThreadedServer(object):
                     raise RuntimeError
 
             except RuntimeError:
-                self.sessions.pop(session)
+                if session:
+                    self.sessions.pop(session)
                 client.shutdown(socket.SHUT_RDWR)
                 client.close()
                 print "a client disconnected"
