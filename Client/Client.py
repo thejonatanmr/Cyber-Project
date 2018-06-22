@@ -20,7 +20,7 @@ class Client:
     def run(self):
         # Require a certificate from the server. We used a self-signed certificate
         # so here ca_certs must be the server certificate itself.
-        self.ssl_socket = ssl_sock = ssl.wrap_socket(self.client_socket, ca_certs="keys/server.crt",
+        self.ssl_socket = ssl_sock = ssl.wrap_socket(self.client_socket, ca_certs="server.crt",
                                                      cert_reqs=ssl.CERT_REQUIRED)
         try:
             ssl_sock.connect((self.server, self.port))
@@ -98,6 +98,7 @@ class Client:
             print "got a new key"
 
             enc = JnEncryption(curr_key)
+            encrypted_file = enc.encrypt(e_file)
 
             key_id = hashlib.sha512(e_file).hexdigest()
 

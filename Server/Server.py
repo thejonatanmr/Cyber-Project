@@ -3,6 +3,7 @@ import socket
 import ssl
 import threading
 import uuid
+import hashlib
 
 
 # the input from the client is received as following:
@@ -36,7 +37,8 @@ class ThreadedServer(object):
         self.server_socket = socket.socket()
         self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.server_socket.bind((self.host, self.port))
-        self.users = {}
+        self.users_database = {}
+        self.keys_database = {}
         self.sessions = {}
 
     def listen(self):
@@ -98,12 +100,22 @@ class ThreadedServer(object):
             self.send_user(client, self.phrase_output("failed", {"error": "you are not logged in"}))
             return False
 
-        user = self.sessions[session]
-        key_id = data["key-id"]
-        key = self.users[user]["bash"].pop("unsorted")
-        self.users[user]["bash"][key_id] = key
-        self.update_json()
+        user = self.sessions[session][0]
+        file_md5 = data["key-id"]
+        key_id = self.generate_key_id(session, file_md5)
+        key = self.users_database[user].pop("unsorted")
+        self.keys_database[key_id] = key
+        self.update_keys_json()
         self.send_user(client, self.phrase_output("ok", {"message": "IDed the key"}))
+
+    def generate_key_id(self, session, file_md5):
+        m = hashlib.md5()
+        user = self.sessions[session][0]
+        password = self.sessions[session][1]
+        m.update(file_md5)
+        m.update(user)
+        m.update(password)
+        return m.hexdigest()
 
     def delete_key(self, client, data):
         session = data["session"]
@@ -111,11 +123,11 @@ class ThreadedServer(object):
             self.send_user(client, self.phrase_output("failed", {"error": "you are not logged in"}))
             return False
 
-        user = self.sessions[session]
-        if data["key-id"] in self.users[user]["bash"]:
-            self.users[user]["bash"].pop(data["key-id"])
-            self.send_user(client, self.phrase_output("ok"))
-            self.update_json()
+        file_id = self.generate_key_id(session, data["key-id"])
+        if file_id in self.keys_database:
+            end_seg = self.keys_database.pop(file_id)
+            self.send_user(client, self.phrase_output("end_seg", {"end_seg": end_seg[1]}))
+            self.update_keys_json()
 
     def generate_new_key(self, client, data):
         session = data["session"]
@@ -123,12 +135,11 @@ class ThreadedServer(object):
             self.send_user(client, self.phrase_output("failed", {"error": "you are not logged in"}))
             return False
 
-        user = self.sessions[session]
+        user = self.sessions[session][0]
         key = self.random_id()
-        # key_id = self.random_id()
-        self.users[user]["bash"]["unsorted"] = key
-        self.send_user(client, self.phrase_output("key", {"key": key}))  # , "key-id": key_id}))
-        self.update_json()
+        self.users_database[user]["unsorted"] = key, data["end_seg"]
+        self.send_user(client, self.phrase_output("key", {"key": key}))
+        self.update_keys_json()
 
     def get_key_with_id(self, client, data):
         session = data["session"]
@@ -136,7 +147,7 @@ class ThreadedServer(object):
             self.send_user(client, self.phrase_output("failed", {"error": "you are not logged in"}))
             return False
 
-        user = self.sessions[session]
+        user = self.sessions[session][0]
         if data["key-id"] in self.users[user]["bash"]:
             key = self.users[user]["bash"][data["key-id"]]
             self.send_user(client, self.phrase_output("key", {"key": key}))
@@ -145,36 +156,49 @@ class ThreadedServer(object):
             self.send_user(client, self.phrase_output("failed", {"error": "key not found"}))
 
     def login(self, client, data):
-        if data["user"] in self.users:
-            if data["password"] == self.users[data["user"]]["password"]:
+        if data["user"] in self.users_database:
+            if self.md5_string(data["password"]) == self.users_database[data["user"]]["password"]:
                 session = self.random_id()
-                self.sessions[session] = data["user"]
+                self.sessions[session] = data["user"], data["password"]
                 self.send_user(client, self.phrase_output("ok", {"session id": session}))
                 return data["user"], session
 
     def new_user(self, client, data):
-        if data["user"] in self.users:
+        if data["user"] in self.users_database:
             self.send_user(client, self.phrase_output("failed", {"error": "user exists"}))
 
         elif len(data["password"]) <= 3:
             self.send_user(client, self.phrase_output("failed", {"error": "password is too short"}))
 
         else:
-            self.users[data["user"]] = {"password": data["password"], "bash": {}}
+            self.users_database[data["user"]] = {"password": self.md5_string(data["password"])}
             self.send_user(client, self.phrase_output("ok", {"message": "made new account"}))
-            self.update_json()
+            self.update_users_json()
+
+    @staticmethod
+    def md5_string(string):
+        m = hashlib.md5()
+        m.update(string)
+        return m.hexdigest()
 
     @staticmethod
     def phrase_output(op, data={}):
         return {"op": op, "data": data}
 
     def initialise_json(self):
-        with open("database.json", "r") as db:
-            self.users = json.load(db)
+        with open("users.json", "r") as db:
+            self.users_database = json.load(db)
 
-    def update_json(self):
-        with open("database.json", "wb") as db:
-            json.dump(self.users, db)
+        with open("keys.json", "r") as db:
+            self.keys_database = json.load(db)
+
+    def update_users_json(self):
+        with open("users.json", "wb") as db:
+            json.dump(self.users_database, db)
+
+    def update_keys_json(self):
+        with open("keys.json", "r") as db:
+            json.dump(self.keys_database, db)
 
 
 if __name__ == "__main__":
