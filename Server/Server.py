@@ -104,7 +104,7 @@ class ThreadedServer(object):
         file_md5 = data["key-id"]
         key_id = self.generate_key_id(session, file_md5)
         key = self.users_database[user].pop("unsorted")
-        self.keys_database[key_id] = key
+        self.keys_database[key_id] = key, data["start_seg"]
         self.update_keys_json()
         self.send_user(client, self.phrase_output("ok", {"message": "IDed the key"}))
 
@@ -125,8 +125,8 @@ class ThreadedServer(object):
 
         file_id = self.generate_key_id(session, data["key-id"])
         if file_id in self.keys_database:
-            end_seg = self.keys_database.pop(file_id)
-            self.send_user(client, self.phrase_output("end_seg", {"end_seg": end_seg[1]}))
+            self.keys_database.pop(file_id)
+            self.send_user(client, self.phrase_output("ok"))
             self.update_keys_json()
 
     def generate_new_key(self, client, data):
@@ -137,7 +137,7 @@ class ThreadedServer(object):
 
         user = self.sessions[session][0]
         key = self.random_id()
-        self.users_database[user]["unsorted"] = key, data["end_seg"]
+        self.users_database[user]["unsorted"] = key
         self.send_user(client, self.phrase_output("key", {"key": key}))
         self.update_keys_json()
 
@@ -147,10 +147,10 @@ class ThreadedServer(object):
             self.send_user(client, self.phrase_output("failed", {"error": "you are not logged in"}))
             return False
 
-        user = self.sessions[session][0]
-        if data["key-id"] in self.users[user]["bash"]:
-            key = self.users[user]["bash"][data["key-id"]]
-            self.send_user(client, self.phrase_output("key", {"key": key}))
+        file_id = self.generate_key_id(session, data["key-id"])
+        if file_id in self.keys_database:
+            key = self.keys_database[file_id]
+            self.send_user(client, self.phrase_output("key", {"key": key[0], "start_seg": key[1]}))
 
         else:
             self.send_user(client, self.phrase_output("failed", {"error": "key not found"}))
