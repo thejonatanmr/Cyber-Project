@@ -5,6 +5,7 @@ import threading
 import uuid
 import hashlib
 
+
 class ThreadedServer(object):
     def __init__(self, host, port):
         self.host = host
@@ -98,9 +99,8 @@ class ThreadedServer(object):
         m = hashlib.md5()
         user = self.sessions[session][0]
         password = self.sessions[session][1]
-        m.update(file_md5)
-        m.update(user)
-        m.update(password)
+        full_str = file_md5 + user + password
+        m.update(full_str)
         return m.hexdigest()
 
     def delete_key(self, client, data):

@@ -61,14 +61,14 @@ class ClientSide:
             curr_key = data["data"]["key"]
             enc = JnEncryption(curr_key, self.UI.frames["WorkingPage"])
 
-            with open(e_file, "r+") as my_file:
+            with open(e_file, "rb") as my_file:
                 data = my_file.read()
 
             encrypted_data = enc.encrypt(data)
             start_seg = encrypted_data[0:16]
-            encrypted_data = encrypted_data[16:]
+            unfinished_encrypted_data = encrypted_data[16:]
             md = hashlib.md5()
-            md.update(encrypted_data)
+            md.update(unfinished_encrypted_data)
             key_id = md.hexdigest()
 
             b64_start = b64encode(start_seg)
@@ -79,8 +79,8 @@ class ClientSide:
                 json_data = self.ssl_socket.read()
                 data = json.loads(json_data)
                 if data["op"] == "ok":
-                    with open(e_file + ".jn", "w+") as my_file:
-                        my_file.write(encrypted_data)
+                    with open(e_file + ".jn", "wb") as my_file:
+                        my_file.write(unfinished_encrypted_data)
                     break
         else:
             if "error" in data["data"]:
@@ -89,7 +89,7 @@ class ClientSide:
                 print "unknown error, the input was - {}".format(json_data)
 
     def decrypt(self, d_file):
-        with open(d_file, "r+") as encrypted_file:
+        with open(d_file, "rb") as encrypted_file:
             unfinished_encrypted_data = encrypted_file.read()
 
         md = hashlib.md5()
