@@ -5,31 +5,6 @@ import threading
 import uuid
 import hashlib
 
-
-# the input from the client is received as following:
-# base64(operation:param1:param2)
-
-# operations:
-#   0 - acknowledge operation, params - 0::
-#   1 - compress key request operation, params - 1::
-#   2 - decompress key request operation, params - 2:keyId:
-#   3 - new user operation, params - 3:user:password
-#   4 - connection operation, params - 4:user:password
-
-# the output the server sends is as following:
-# base64(operation:params1:params2)
-# operations:
-#   0 - connected successfully, params - 0::
-#   1 - failed to connect, params - {:}
-#   2 - generated new key for compression, params - {key:keyId}
-#   3 - deleted the key got decompression, params - {key:}
-
-# the database is structured as the following:
-# {user : {
-#           password :
-#           hash : {id1: key1, id2:key2, etc...}
-#           }}
-
 class ThreadedServer(object):
     def __init__(self, host, port):
         self.host = host
