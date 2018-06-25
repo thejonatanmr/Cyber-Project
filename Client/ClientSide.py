@@ -64,7 +64,9 @@ class ClientSide:
             with open(e_file, "rb") as my_file:
                 data = my_file.read()
 
-            encrypted_data = enc.encrypt(data)
+            encrypted_data, added_length = enc.encrypt(data)
+
+            #TODO fix
             start_seg = encrypted_data[0:16]
             unfinished_encrypted_data = encrypted_data[16:]
             md = hashlib.md5()
@@ -72,6 +74,7 @@ class ClientSide:
             key_id = md.hexdigest()
 
             b64_start = b64encode(start_seg)
+
             while True:
                 self.ssl_socket.write(
                     json.dumps({"op": "set-hash",
@@ -80,7 +83,7 @@ class ClientSide:
                 data = json.loads(json_data)
                 if data["op"] == "ok":
                     with open(e_file + ".jn", "wb") as my_file:
-                        my_file.write(unfinished_encrypted_data)
+                        my_file.write(unfinished_encrypted_data + added_length)
                     break
         else:
             if "error" in data["data"]:
@@ -92,6 +95,9 @@ class ClientSide:
         with open(d_file, "rb") as encrypted_file:
             unfinished_encrypted_data = encrypted_file.read()
 
+        added_length = unfinished_encrypted_data[-2:]
+        unfinished_encrypted_data = unfinished_encrypted_data[0:-2]
+
         md = hashlib.md5()
         md.update(unfinished_encrypted_data)
         key_id = md.hexdigest()
@@ -101,14 +107,21 @@ class ClientSide:
         data = json.loads(json_data)
         if data["op"] == "key":
             key = data["data"]["key"]
-            start_seg = b64decode(data["data"]["start_seg"])
+            coded_start = data["data"]["start_seg"]
+            start_seg = b64decode(coded_start)
             dec = JnEncryption(key, self.UI.frames["WorkingPage"])
 
             encrypted_data = start_seg + unfinished_encrypted_data
 
+            with open("after_enc.txt", "wb") as my_file:
+                my_file.write(encrypted_data)
+
             data = dec.decrypt(encrypted_data)
 
-            with open(d_file[:-3], "w+") as final_file:
+            if int(added_length) != 0:
+                data = data[0:-int(added_length)]
+
+            with open(d_file[:-3], "wb") as final_file:
                 final_file.write(data)
 
             while True:
@@ -128,5 +141,3 @@ class ClientSide:
     def exit(self):
         self.ssl_socket.write(json.dumps({"op": "close", "data": {"session": self.session}}))
         self.client_socket.close()
-
-

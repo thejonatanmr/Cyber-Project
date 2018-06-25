@@ -17,12 +17,13 @@ class JnEncryption:
 
         if self.UI:
             self.UI.update_progress(len(data), total_length)
+
         if len(data) >= 1:
             enc_str += self.encryption_imp.encrypt('{0: <16}'.format(data))
 
         if self.UI:
             self.UI.next_page()
-        return enc_str
+        return enc_str, '{0: <2}'.format(16-len(data))
 
     def decrypt(self, data):
         dec_str = ""
