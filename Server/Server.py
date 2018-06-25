@@ -75,6 +75,9 @@ class ThreadedServer(object):
                     elif data["op"] == "set-hash":
                         self.set_hash(client, data["data"])
 
+                    elif data["op"] == "close":
+                        self.close_connection(client, data["data"])
+                        return False
                 else:
                     raise RuntimeError
 
@@ -92,7 +95,14 @@ class ThreadedServer(object):
 
     @staticmethod
     def random_id():
-        return str(uuid.uuid4())
+        return str(uuid.uuid4())[0:16]
+
+    def close_connection(self, client, data):
+        session = data["session"]
+        if session:
+            self.sessions.pop(session)
+        client.shutdown(socket.SHUT_RDWR)
+        client.close()
 
     def set_hash(self, client, data):
         session = data["session"]
@@ -106,6 +116,7 @@ class ThreadedServer(object):
         key = self.users_database[user].pop("unsorted")
         self.keys_database[key_id] = key, data["start_seg"]
         self.update_keys_json()
+        self.update_users_json()
         self.send_user(client, self.phrase_output("ok", {"message": "IDed the key"}))
 
     def generate_key_id(self, session, file_md5):
@@ -139,7 +150,7 @@ class ThreadedServer(object):
         key = self.random_id()
         self.users_database[user]["unsorted"] = key
         self.send_user(client, self.phrase_output("key", {"key": key}))
-        self.update_keys_json()
+        self.update_users_json()
 
     def get_key_with_id(self, client, data):
         session = data["session"]
@@ -197,7 +208,7 @@ class ThreadedServer(object):
             json.dump(self.users_database, db)
 
     def update_keys_json(self):
-        with open("keys.json", "r") as db:
+        with open("keys.json", "wb") as db:
             json.dump(self.keys_database, db)
 
 

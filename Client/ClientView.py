@@ -1,8 +1,9 @@
 import tkMessageBox
 from Tkinter import *
+from ttk import *
 import tkFileDialog
 from tkFont import *
-import Client as Cl
+import ClientSide as Cl
 
 
 class GUIClass(Tk):
@@ -19,14 +20,15 @@ class GUIClass(Tk):
 
         self.frames = {}
 
-        for F in (LoginPage, FilePage, EndPage):
+        for F in (LoginPage, FilePage, EncDecPage, WorkingPage, FinishPage):
             page_name = F.__name__
             frame = F(parent=container, controller=self)
             self.frames[page_name] = frame
 
             frame.grid(row=0, column=0, sticky="nsew")
 
-        self.client = Cl.Client()
+        self.file = ""
+        self.client_side = Cl.ClientSide(self)
         self.show_frame("LoginPage")
 
     def show_frame(self, page_name):
@@ -69,13 +71,10 @@ class LoginPage(Frame):
         self.pack()
 
     def check_login(self):
-        try:
-            self.controller.client.run()
-
-        except:
+        if not self.controller.client_side.run():
             tkMessageBox.showerror("Server error", "Could not connect to the server please try again")
 
-        if self.controller.client.login(self.user_text.get(), self.pass_text.get()):
+        if self.controller.client_side.login(self.user_text.get(), self.pass_text.get()):
             tkMessageBox.showinfo("Login successfully", "You successfully logged in as {}".format(self.user_text.get()))
             self.controller.show_frame("FilePage")
 
@@ -83,14 +82,11 @@ class LoginPage(Frame):
             tkMessageBox.showerror("Login Unsuccessful", "Could not login, maybe the user and the password were wrong")
 
     def check_new_user(self):
-        try:
-            self.controller.client.run()
-
-        except:
+        if not self.controller.client_side.run():
             tkMessageBox.showerror("Server error", "Could not connect to the server please try again")
 
-        if self.controller.client.new_user(self.user_text.get(), self.pass_text.get()):
-            if self.controller.client.login(self.user_text.get(), self.pass_text.get()):
+        if self.controller.client_side.new_user(self.user_text.get(), self.pass_text.get()):
+            if self.controller.client_side.login(self.user_text.get(), self.pass_text.get()):
                 tkMessageBox.showinfo("Login successfully",
                                       "You successfully signed up and logged in")
                 self.controller.show_frame("FilePage")
@@ -108,39 +104,85 @@ class FilePage(Frame):
         Frame.__init__(self, parent)
         self.controller = controller
         label = Label(self, text="Please choose a file", font=controller.title_font)
-        label.pack(side="top", fill="x", pady=10)
+        label.grid(column=0, row=0)
 
         file_button = Button(self, text="Browse", command=self.open_file)
-        file_button.pack()
+        file_button.grid(column=1, row=1)
 
-        continue_button = Button(self, text="Browse", command=self.can_continue)
-        continue_button.pack()
+        self.file_path_text = Entry(self, width=80)
+        self.file_path_text.grid(column=0, row=1)
+
+        continue_button = Button(self, text="Next", command=self.can_continue)
+        continue_button.grid(column=0, row=2)
+        self.pack()
 
     def open_file(self):
-        file = tkFileDialog.askopenfilename()
+        file_path = tkFileDialog.askopenfilename()
+        self.file_path_text.delete(0, END)
+        self.file_path_text.insert(0, file_path)
 
     def can_continue(self):
-        self.controller.show_frame("EndPage")
+        self.controller.file = self.file_path_text.get()
+        self.controller.show_frame("EncDecPage")
 
 
-class EndPage(Frame):
+class EncDecPage(Frame):
     def __init__(self, parent, controller):
         Frame.__init__(self, parent)
         self.controller = controller
         label = Label(self, text="Choose an operation", font=controller.title_font)
-        label.pack(side="top", fill="x", pady=10)
+        label.grid(column=0, row=0)
 
         encrypt_button = Button(self, text="Encrypt", command=self.encrypt)
-        encrypt_button.pack()
+        encrypt_button.grid(column=0, row=1)
 
-        decrypt_button = Button(self, text="Decrypt", command=self.decrypt())
-        decrypt_button.pack()
+        decrypt_button = Button(self, text="Decrypt", command=self.decrypt)
+        decrypt_button.grid(column=1, row=1)
 
     def encrypt(self):
-        pass
+        self.controller.show_frame("WorkingPage")
+        self.controller.client_side.encrypt(self.controller.file)
 
     def decrypt(self):
-        pass
+        self.controller.show_frame("WorkingPage")
+        self.controller.client_side.decrypt(self.controller.file)
+
+
+class WorkingPage(Frame):
+    def __init__(self, parent, controller):
+        Frame.__init__(self, parent)
+        self.controller = controller
+        label = Label(self, text="Working", font=controller.title_font)
+        label.grid(column=0, row=0)
+
+        self.progress = Progressbar(self, orient="horizontal", length=120, mode="determinate")
+        self.progress.grid(column=0, row=1)
+        self.progress["value"] = 0
+        self.progress["maximum"] = 100
+
+        self.pack()
+
+    def update_progress(self, current, max_value):
+        prec = (current / max_value) * 100
+        self.progress["value"] = prec
+
+    def next_page(self):
+        self.controller.show_frame("FinishPage")
+
+
+class FinishPage(Frame):
+    def __init__(self, parent, controller):
+        Frame.__init__(self, parent)
+        self.controller = controller
+        label = Label(self, text="Finished", font=controller.title_font)
+        label.grid(column=0, row=0)
+
+        finish_button = Button(self, text="Finish", command=self.exit_ui)
+        finish_button.grid(column=0, row=1)
+
+    def exit_ui(self):
+        self.controller.client_side.exit()
+        self.controller.destroy()
 
 
 if __name__ == "__main__":
