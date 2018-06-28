@@ -26,11 +26,9 @@ class ClientSide:
         try:
             ssl_sock.connect((self.server, self.port))
 
-            return True
-
-        except:
+        except Exception:
             print "error connecting to the server"
-            return False
+            self.UI.raise_error_box("Server error", "Could not connect to the server, please try again")
 
     def new_user(self, user, password):
         self.ssl_socket.write(json.dumps({"op": "new-user", "data": {"user": user, "password": password}}))
@@ -40,17 +38,22 @@ class ClientSide:
         if data["op"] == "ok":
             return True
         else:
+            self.UI.raise_error_box("error", data["data"]["error"])
             return False
 
     def login(self, user, password):
         self.ssl_socket.write(json.dumps({"op": "login", "data": {"user": user, "password": password}}))
         json_data = self.ssl_socket.read()
-        data = json.loads(json_data)
-        if data["op"] == "ok":
-            self.session = data["data"]["session id"]
-            return True
-        else:
-            return False
+        try:
+            data = json.loads(json_data)
+            if data["op"] == "ok":
+                self.session = data["data"]["session id"]
+                return True
+            else:
+                self.UI.raise_error_box("error", data["data"]["error"])
+                return False
+        except Exception:
+            self.UI.raise_error_box("Server Error", "Error reading data sent from server.")
 
     def encrypt(self, e_file):
         self.ssl_socket.write(json.dumps({"op": "new-key", "data": {"session": self.session}}))

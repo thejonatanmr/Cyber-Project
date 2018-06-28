@@ -29,6 +29,7 @@ class ThreadedServer(object):
 
     def listen_to_client(self, client, address):
         while True:
+            session = None
             try:
                 json_data = client.read()
                 if json_data:
@@ -57,7 +58,8 @@ class ThreadedServer(object):
                 else:
                     raise RuntimeError
 
-            except RuntimeError:
+            except Exception as e:
+                print e
                 if session:
                     self.sessions.pop(session)
                 client.shutdown(socket.SHUT_RDWR)
@@ -148,6 +150,8 @@ class ThreadedServer(object):
                 self.sessions[session] = data["user"], data["password"]
                 self.send_user(client, self.phrase_output("ok", {"session id": session}))
                 return data["user"], session
+        self.send_user(client, self.phrase_output("failed", {"error": "bad login. the username or password were wrong"}))
+        raise RuntimeError
 
     def new_user(self, client, data):
         if data["user"] in self.users_database:

@@ -19,6 +19,7 @@ class GUIClass(Tk):
         container.grid_columnconfigure(0, weight=1)
 
         self.frames = {}
+        self.raised_frame = None
 
         for F in (LoginPage, FilePage, EncDecPage, WorkingPage, FinishPage):
             page_name = F.__name__
@@ -33,8 +34,11 @@ class GUIClass(Tk):
 
     def show_frame(self, page_name):
         # Show a frame for the given page name
-        frame = self.frames[page_name]
-        frame.tkraise()
+        self.raised_frame = self.frames[page_name]
+        self.raised_frame.tkraise()
+
+    def raise_error_box(self, error_header, error_message):
+        tkMessageBox.showerror(error_header, error_message)
 
 
 class LoginPage(Frame):
@@ -71,32 +75,20 @@ class LoginPage(Frame):
         self.pack()
 
     def check_login(self):
-        if not self.controller.client_side.run():
-            tkMessageBox.showerror("Server error", "Could not connect to the server please try again")
+        self.controller.client_side.run()
 
         if self.controller.client_side.login(self.user_text.get(), self.pass_text.get()):
             tkMessageBox.showinfo("Login successfully", "You successfully logged in as {}".format(self.user_text.get()))
             self.controller.show_frame("FilePage")
 
-        else:
-            tkMessageBox.showerror("Login Unsuccessful", "Could not login, maybe the user and the password were wrong")
-
     def check_new_user(self):
-        if not self.controller.client_side.run():
-            tkMessageBox.showerror("Server error", "Could not connect to the server please try again")
+        self.controller.client_side.run()
 
         if self.controller.client_side.new_user(self.user_text.get(), self.pass_text.get()):
             if self.controller.client_side.login(self.user_text.get(), self.pass_text.get()):
                 tkMessageBox.showinfo("Login successfully",
                                       "You successfully signed up and logged in")
                 self.controller.show_frame("FilePage")
-
-            else:
-                tkMessageBox.showerror("Login unsuccessful",
-                                       "Did signed up but could not login")
-
-        else:
-            tkMessageBox.showerror("Signup unsuccessful", "Could not sign up, maybe the user is taken")
 
 
 class FilePage(Frame):
@@ -139,6 +131,12 @@ class EncDecPage(Frame):
         decrypt_button = Button(self, text="Decrypt", command=self.decrypt)
         decrypt_button.grid(column=1, row=1)
 
+        return_button = Button(self, text="Return", command=self.return_page)
+        return_button.grid(column=0, row=2)
+
+    def return_page(self):
+        self.controller.show_frame("FilePage")
+
     def encrypt(self):
         self.controller.show_frame("WorkingPage")
         self.controller.client_side.encrypt(self.controller.file)
@@ -177,8 +175,14 @@ class FinishPage(Frame):
         label = Label(self, text="Finished", font=controller.title_font)
         label.grid(column=0, row=0)
 
-        finish_button = Button(self, text="Finish", command=self.exit_ui)
+        finish_button = Button(self, text="Finish", command=self.start_again)
         finish_button.grid(column=0, row=1)
+
+        exit_button = Button(self, text="Exit", command=self.exit_ui)
+        exit_button.grid(column=1, row=1)
+
+    def start_again(self):
+        self.controller.show_frame("FilePage")
 
     def exit_ui(self):
         self.controller.client_side.exit()
