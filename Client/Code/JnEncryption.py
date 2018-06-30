@@ -1,4 +1,4 @@
-from Rijndael import Rijndael
+from Encryptions.Rijndael import Rijndael
 
 
 class JnEncryption:

@@ -3,7 +3,7 @@ from Tkinter import *
 from ttk import *
 import tkFileDialog
 from tkFont import *
-import ClientSide as Cl
+import Code.ClientSide as Cl
 
 
 class GUIClass(Tk):
@@ -37,8 +37,10 @@ class GUIClass(Tk):
         self.raised_frame = self.frames[page_name]
         self.raised_frame.tkraise()
 
-    def raise_error_box(self, error_header, error_message):
+    def raise_error_box(self, error_header, error_message, move_frame=False, frame=""):
         tkMessageBox.showerror(error_header, error_message)
+        if move_frame:
+            self.show_frame(frame)
 
 
 class LoginPage(Frame):
@@ -115,7 +117,12 @@ class FilePage(Frame):
 
     def can_continue(self):
         self.controller.file = self.file_path_text.get()
-        self.controller.show_frame("EncDecPage")
+        if self.controller.client_side.check_enc_file(self.controller.file):
+            tkMessageBox.showinfo("Encrypted file detected", "The file chosen is detected as an encrypted file. "
+                                                             "moving to decryption")
+            self.controller.frames["EncDecPage"].decrypt()
+        else:
+            self.controller.show_frame("EncDecPage")
 
 
 class EncDecPage(Frame):
