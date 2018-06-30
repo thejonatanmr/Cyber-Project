@@ -32,10 +32,12 @@ class ClientSide:
                                                      cert_reqs=ssl.CERT_REQUIRED)
         try:
             ssl_sock.connect((self.server, self.port))
+            return True
 
         except Exception:
             print "error connecting to the server"
             self.UI.raise_error_box("Server error", "Could not connect to the server, please try again")
+            return False
 
     def check_enc_file(self, file_path):
         global PROGRAM_V, PROGRAM_ID
@@ -75,22 +77,28 @@ class ClientSide:
         except Exception:
             self.UI.raise_error_box("Server Error", "Error reading data sent from server.")
 
-    def encrypt(self, e_file):
+    def encrypt(self, e_file, e_type):
         global PROGRAM_ID, PROGRAM_V
-        self.ssl_socket.write(json.dumps({"op": "new-key", "data": {"session": self.session}}))
+        type_id = CONFIG.getint("Encryptions", e_type)
+        self.ssl_socket.write(json.dumps({"op": "new-key", "data": {"e_type": type_id, "session": self.session}}))
 
         json_data = self.ssl_socket.read()
         data = json.loads(json_data)
         if data["op"] == "key":
             curr_key = data["data"]["key"]
-            enc = JnEncryption(curr_key, self.UI.frames["WorkingPage"])
+
+            try:
+                enc = JnEncryption(curr_key, self.UI.frames["WorkingPage"], type_id)
+
+            except RuntimeError:
+                self.UI.raise_error_box("error", "Unknown encryption type", move_frame=True, frame='FinishPage')
+                return
 
             with open(e_file, "rb") as my_file:
                 data = my_file.read()
 
             encrypted_data, added_length = enc.encrypt(data)
 
-            # TODO fix
             start_seg = encrypted_data[0:10]
             unfinished_encrypted_data = encrypted_data[10:]
 
@@ -102,9 +110,15 @@ class ClientSide:
             b64_start = b64encode(start_seg)
 
             while True:
-                self.ssl_socket.write(
-                    json.dumps({"op": "set-hash",
-                                "data": {"key-id": key_id, "start_seg": b64_start, "session": self.session}}))
+                try:
+                    self.ssl_socket.write(
+                        json.dumps({"op": "set-hash",
+                                    "data": {"key-id": key_id, "start_seg": b64_start,
+                                             "e_type": type_id, "session": self.session}}))
+                except RuntimeError:
+                    self.UI.raise_error_box("error", "Unknown encryption type", move_frame=True, frame='FinishPage')
+                    return
+
                 json_data = self.ssl_socket.read()
                 data = json.loads(json_data)
                 if data["op"] == "ok":
@@ -136,7 +150,13 @@ class ClientSide:
             key = data["data"]["key"]
             coded_start = data["data"]["start_seg"]
             start_seg = b64decode(coded_start)
-            dec = JnEncryption(key, self.UI.frames["WorkingPage"])
+
+            try:
+                dec = JnEncryption(key, self.UI.frames["WorkingPage"], data["data"]["e_type"])
+
+            except RuntimeError:
+                self.UI.raise_error_box("error", "Unknown encryption type", move_frame=True, frame='FinishPage')
+                return
 
             ID = headed_encrypted_data[0:4]
             V = headed_encrypted_data[4:8]
@@ -145,9 +165,6 @@ class ClientSide:
                                                                                                                    PROGRAM_V):
                 unfinished_encrypted_data = headed_encrypted_data[8:]
                 encrypted_data = start_seg + unfinished_encrypted_data
-
-                with open("after_enc.txt", "wb") as my_file:
-                    my_file.write(encrypted_data)
 
                 data = dec.decrypt(encrypted_data)
 

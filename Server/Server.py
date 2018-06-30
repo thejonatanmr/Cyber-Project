@@ -35,7 +35,7 @@ class ThreadedServer(object):
                 if json_data:
                     data = json.loads(json_data)
                     if data["op"] == "login":
-                        user, session = self.login(client, data["data"])
+                        self.login(client, data["data"])
 
                     elif data["op"] == "new-key":
                         self.generate_new_key(client, data["data"])
@@ -72,8 +72,17 @@ class ThreadedServer(object):
         client.write(json.dumps(data))
 
     @staticmethod
+    def generate_random_key(e_type):
+        if e_type == 1:
+            return str(uuid.uuid4())[0:16]
+        elif e_type == 2:
+            return str(uuid.uuid4())
+        else:
+            return False
+
+    @staticmethod
     def random_id():
-        return str(uuid.uuid4())[0:16]
+        return str(uuid.uuid4())
 
     def close_connection(self, client, data):
         session = data["session"]
@@ -92,7 +101,7 @@ class ThreadedServer(object):
         file_md5 = data["key-id"]
         key_id = self.generate_key_id(session, file_md5)
         key = self.users_database[user].pop("unsorted")
-        self.keys_database[key_id] = key, data["start_seg"]
+        self.keys_database[key_id] = key, data["start_seg"], data["e_type"]
         self.update_keys_json()
         self.update_users_json()
         self.send_user(client, self.phrase_output("ok", {"message": "IDed the key"}))
@@ -124,7 +133,12 @@ class ThreadedServer(object):
             return False
 
         user = self.sessions[session][0]
-        key = self.random_id()
+
+        key = self.generate_random_key(data["e_type"])
+        if key == False:
+            self.send_user(client, self.phrase_output("failed", {"error": "Could not detect encyption type"}))
+            return False
+
         self.users_database[user]["unsorted"] = key
         self.send_user(client, self.phrase_output("key", {"key": key}))
         self.update_users_json()
@@ -138,7 +152,7 @@ class ThreadedServer(object):
         file_id = self.generate_key_id(session, data["key-id"])
         if file_id in self.keys_database:
             key = self.keys_database[file_id]
-            self.send_user(client, self.phrase_output("key", {"key": key[0], "start_seg": key[1]}))
+            self.send_user(client, self.phrase_output("key", {"key": key[0], "start_seg": key[1], "e_type": key[2]}))
 
         else:
             self.send_user(client, self.phrase_output("failed", {"error": "key not found"}))
@@ -149,9 +163,9 @@ class ThreadedServer(object):
                 session = self.random_id()
                 self.sessions[session] = data["user"], data["password"]
                 self.send_user(client, self.phrase_output("ok", {"session id": session}))
-                return data["user"], session
-        self.send_user(client, self.phrase_output("failed", {"error": "bad login. the username or password were wrong"}))
-        raise RuntimeError
+        else:
+            self.send_user(client,self.phrase_output("failed", {"error": "bad login. the username or password were wrong"}))
+
 
     def new_user(self, client, data):
         if data["user"] in self.users_database:

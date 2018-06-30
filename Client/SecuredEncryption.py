@@ -4,6 +4,8 @@ from ttk import *
 import tkFileDialog
 from tkFont import *
 import Code.ClientSide as Cl
+import ConfigParser
+
 
 
 class GUIClass(Tk):
@@ -17,6 +19,9 @@ class GUIClass(Tk):
         container.pack(side="top", fill="both", expand=True)
         container.grid_rowconfigure(0, weight=1)
         container.grid_columnconfigure(0, weight=1)
+
+        self.config = ConfigParser.RawConfigParser()
+        self.config.read("SecuredEncryption.ini")
 
         self.frames = {}
         self.raised_frame = None
@@ -46,6 +51,7 @@ class GUIClass(Tk):
 class LoginPage(Frame):
     def __init__(self, parent, controller):
         Frame.__init__(self, parent)
+        self.connected = False
         self.controller = controller
         login_label = Label(self, text="Login", font=self.controller.title_font)
         # login_label.pack(side="top", fill="x", pady=10)
@@ -76,51 +82,67 @@ class LoginPage(Frame):
         self.signup_button.grid(column=1, row=6)
         self.pack()
 
-    def check_login(self):
-        self.controller.client_side.run()
+    def check_connected(self):
+        if self.connected:
+            return True
+        else:
+            self.connected = self.controller.client_side.run()
+            return self.connected
 
-        if self.controller.client_side.login(self.user_text.get(), self.pass_text.get()):
-            tkMessageBox.showinfo("Login successfully", "You successfully logged in as {}".format(self.user_text.get()))
-            self.controller.show_frame("FilePage")
+    def check_login(self):
+        if self.check_connected():
+
+            if self.controller.client_side.login(self.user_text.get(), self.pass_text.get()):
+                tkMessageBox.showinfo("Login successfully", "You successfully logged in as {}".format(self.user_text.get()))
+                self.controller.show_frame("FilePage")
 
     def check_new_user(self):
-        self.controller.client_side.run()
+        if self.check_connected():
 
-        if self.controller.client_side.new_user(self.user_text.get(), self.pass_text.get()):
-            if self.controller.client_side.login(self.user_text.get(), self.pass_text.get()):
-                tkMessageBox.showinfo("Login successfully",
-                                      "You successfully signed up and logged in")
-                self.controller.show_frame("FilePage")
+            if self.controller.client_side.new_user(self.user_text.get(), self.pass_text.get()):
+                if self.controller.client_side.login(self.user_text.get(), self.pass_text.get()):
+                    tkMessageBox.showinfo("Login successfully",
+                                          "You successfully signed up and logged in")
+                    self.controller.show_frame("FilePage")
 
 
 class FilePage(Frame):
     def __init__(self, parent, controller):
         Frame.__init__(self, parent)
         self.controller = controller
+        self.last_opened = self.controller.config.get("UI", "file_path")
+
         label = Label(self, text="Please choose a file", font=controller.title_font)
         label.grid(column=0, row=0)
 
         file_button = Button(self, text="Browse", command=self.open_file)
         file_button.grid(column=1, row=1)
 
-        self.file_path_text = Entry(self, width=80)
+        self.file_path_text = Entry(self, width=80, )
         self.file_path_text.grid(column=0, row=1)
+        self.file_path_text.delete(0, END)
+        self.file_path_text.insert(0, self.last_opened)
 
         continue_button = Button(self, text="Next", command=self.can_continue)
         continue_button.grid(column=0, row=2)
         self.pack()
 
     def open_file(self):
-        file_path = tkFileDialog.askopenfilename()
+        file_path = tkFileDialog.askopenfilename(initialdir=self.last_opened)
         self.file_path_text.delete(0, END)
         self.file_path_text.insert(0, file_path)
+        self.last_opened = "".join(file_path.split("/")[0:-1])
 
     def can_continue(self):
+        with open("SecuredEncryption.ini", 'wb') as config_file:
+            self.controller.config.write(config_file)
+
         self.controller.file = self.file_path_text.get()
         if self.controller.client_side.check_enc_file(self.controller.file):
             tkMessageBox.showinfo("Encrypted file detected", "The file chosen is detected as an encrypted file. "
                                                              "moving to decryption")
-            self.controller.frames["EncDecPage"].decrypt()
+            self.controller.frames["EncDecPage"].operation.set("decrypt")
+            self.controller.frames["EncDecPage"].continue_next_page()
         else:
             self.controller.show_frame("EncDecPage")
 
@@ -129,28 +151,51 @@ class EncDecPage(Frame):
     def __init__(self, parent, controller):
         Frame.__init__(self, parent)
         self.controller = controller
+
+        self.operation = StringVar()
+        self.type = StringVar()
+
         label = Label(self, text="Choose an operation", font=controller.title_font)
         label.grid(column=0, row=0)
 
-        encrypt_button = Button(self, text="Encrypt", command=self.encrypt)
-        encrypt_button.grid(column=0, row=1)
+        self.encryption_radio = Radiobutton(self, text="Encrypt", variable=self.operation, value="encrypt", command=self.update_radio_encrypt)
+        self.encryption_radio.grid(column=0, row=1)
 
-        decrypt_button = Button(self, text="Decrypt", command=self.decrypt)
-        decrypt_button.grid(column=1, row=1)
+        self.decrypt_radio = Radiobutton(self, text="Decrypt", variable=self.operation, value="decrypt", command=self.update_radio_decrypt)
+        self.decrypt_radio.grid(column=1, row=1)
 
-        return_button = Button(self, text="Return", command=self.return_page)
-        return_button.grid(column=0, row=2)
+        label = Label(self, text="Choose a type of encryption", font=controller.title_font)
+        label.grid(column=0, row=2)
+
+        self.AES_radio = Radiobutton(self, text="AES", variable=self.type, value="aes", state="disabled")
+        self.AES_radio.grid(column=0, row=3)
+
+        self.Builtin_radio = Radiobutton(self, text="BlowFish", variable=self.type, value="blowfish", state="disabled")
+        self.Builtin_radio.grid(column=0, row=4)
+
+        self.continue_button = Button(self, text="continue", command=self.continue_next_page)
+        self.continue_button.grid(column=1, row=5)
+
+        self.return_button = Button(self, text="Return", command=self.return_page)
+        self.return_button.grid(column=0, row=5)
 
     def return_page(self):
         self.controller.show_frame("FilePage")
 
-    def encrypt(self):
-        self.controller.show_frame("WorkingPage")
-        self.controller.client_side.encrypt(self.controller.file)
+    def update_radio_encrypt(self):
+        self.Builtin_radio['state'] = "normal"
+        self.AES_radio['state'] = "normal"
 
-    def decrypt(self):
+    def update_radio_decrypt(self):
+        self.Builtin_radio['state'] = "disabled"
+        self.AES_radio['state'] = "disabled"
+
+    def continue_next_page(self):
         self.controller.show_frame("WorkingPage")
-        self.controller.client_side.decrypt(self.controller.file)
+        if self.operation.get() == "encrypt":
+            self.controller.client_side.encrypt(self.controller.file, self.type.get())
+        else:
+            self.controller.client_side.decrypt(self.controller.file)
 
 
 class WorkingPage(Frame):
