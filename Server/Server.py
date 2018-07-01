@@ -18,6 +18,7 @@ class ThreadedServer(object):
         self.sessions = {}
 
     def listen(self):
+        """Main server thread. waiting for new client connections and opening threads for each one"""
         self.initialise_json()
         self.server_socket.listen(5)
         while True:
@@ -28,6 +29,7 @@ class ThreadedServer(object):
             threading.Thread(target=self.listen_to_client, args=(client, address)).start()
 
     def listen_to_client(self, client, address):
+        """Main client thread loop. each client thread runs on this function."""
         while True:
             session = None
             try:
@@ -69,10 +71,12 @@ class ThreadedServer(object):
 
     @staticmethod
     def send_user(client, data):
+        """Fromatting and sending data to user."""
         client.write(json.dumps(data))
 
     @staticmethod
     def generate_random_key(e_type):
+        """Generates keys based on encryption type"""
         if e_type == 1:
             return str(uuid.uuid4())[0:16]
         elif e_type == 2:
@@ -82,9 +86,11 @@ class ThreadedServer(object):
 
     @staticmethod
     def random_id():
+        """generates random id for sessions."""
         return str(uuid.uuid4())
 
     def close_connection(self, client, data):
+        """Closes connection with a client"""
         session = data["session"]
         if session:
             self.sessions.pop(session)
@@ -92,6 +98,7 @@ class ThreadedServer(object):
         client.close()
 
     def set_hash(self, client, data):
+        """Sets the key in the database based on a file-id from the user."""
         session = data["session"]
         if session not in self.sessions:
             self.send_user(client, self.phrase_output("failed", {"error": "you are not logged in"}))
@@ -107,6 +114,7 @@ class ThreadedServer(object):
         self.send_user(client, self.phrase_output("ok", {"message": "IDed the key"}))
 
     def generate_key_id(self, session, file_md5):
+        """Formatting and making the file-id into key-id"""
         m = hashlib.md5()
         user = self.sessions[session][0]
         password = self.sessions[session][1]
@@ -115,6 +123,7 @@ class ThreadedServer(object):
         return m.hexdigest()
 
     def delete_key(self, client, data):
+        """Deletes key from the database based on the file-id given"""
         session = data["session"]
         if session not in self.sessions:
             self.send_user(client, self.phrase_output("failed", {"error": "you are not logged in"}))
@@ -127,6 +136,7 @@ class ThreadedServer(object):
             self.update_keys_json()
 
     def generate_new_key(self, client, data):
+        """generates new key from a specific type and sends user"""
         session = data["session"]
         if session not in self.sessions:
             self.send_user(client, self.phrase_output("failed", {"error": "you are not logged in"}))
@@ -144,6 +154,7 @@ class ThreadedServer(object):
         self.update_users_json()
 
     def get_key_with_id(self, client, data):
+        """Gets file-id and sends the corresponding key to the client"""
         session = data["session"]
         if session not in self.sessions:
             self.send_user(client, self.phrase_output("failed", {"error": "you are not logged in"}))
@@ -158,16 +169,22 @@ class ThreadedServer(object):
             self.send_user(client, self.phrase_output("failed", {"error": "key not found"}))
 
     def login(self, client, data):
+        """Checks the integrity of username and password of the user.
+        makes a new session if ok, sends the user the new session.
+        """
         if data["user"] in self.users_database:
             if self.md5_string(data["password"]) == self.users_database[data["user"]]["password"]:
                 session = self.random_id()
                 self.sessions[session] = data["user"], data["password"]
                 self.send_user(client, self.phrase_output("ok", {"session id": session}))
         else:
-            self.send_user(client,self.phrase_output("failed", {"error": "bad login. the username or password were wrong"}))
-
+            self.send_user(client,
+                           self.phrase_output("failed", {"error": "bad login. the username or password were wrong"}))
 
     def new_user(self, client, data):
+        """Checks the integrity of new username and password.
+        saves the username and md5 of the password if ok.
+        """
         if data["user"] in self.users_database:
             self.send_user(client, self.phrase_output("failed", {"error": "user exists"}))
 
@@ -181,15 +198,18 @@ class ThreadedServer(object):
 
     @staticmethod
     def md5_string(string):
+        """Takes a string and return the MD5 of that string"""
         m = hashlib.md5()
         m.update(string)
         return m.hexdigest()
 
     @staticmethod
     def phrase_output(op, data={}):
+        """Formatting the data into a json for sending the client"""
         return {"op": op, "data": data}
 
     def initialise_json(self):
+        """Reads the two databases"""
         with open("users.json", "r") as db:
             self.users_database = json.load(db)
 
@@ -197,10 +217,12 @@ class ThreadedServer(object):
             self.keys_database = json.load(db)
 
     def update_users_json(self):
+        """Updates the users database"""
         with open("users.json", "wb") as db:
             json.dump(self.users_database, db)
 
     def update_keys_json(self):
+        """Updates the keys database"""
         with open("keys.json", "wb") as db:
             json.dump(self.keys_database, db)
 

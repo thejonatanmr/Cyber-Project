@@ -3,7 +3,14 @@ from Crypto.Cipher import Blowfish
 
 
 class JnEncryption:
-    def __init__(self, key, UI=None, e_type="1"):
+    """"A generic class for all the encryption implementations and future ones."""
+    def __init__(self, key, e_type):
+        """Sets the encryption implementation based on the type given.
+        this is the only part of the code that need to be updated to add new implementations.
+
+        :param key: The encryption key
+        :param e_type: The encryption type
+        """
         if e_type == 1:
             self.encryption_imp = Rijndael(key)
             self.block_size = 16
@@ -13,40 +20,34 @@ class JnEncryption:
         else:
             raise RuntimeError
 
-        self.UI = UI
-
     def encrypt(self, data):
+        """Encrypting the data given in blocks decided by the block size of the type.
+
+        :param data: Data to encrypt
+        :return: Encrypted data
+        """
         enc_str = ""
-        total_length = len(data)
         while len(data) >= self.block_size:
-            if self.UI:
-                self.UI.update_progress(len(data) - self.block_size, total_length)
             enc_str += self.encryption_imp.encrypt(data[0:self.block_size])
             data = data[self.block_size:]
-
-        if self.UI:
-            self.UI.update_progress(len(data), total_length)
 
         if len(data) >= 1:
             enc_str += self.encryption_imp.encrypt(str('{0: <' + str(self.block_size) + '}').format(data))
 
-        if self.UI:
-            self.UI.next_page()
         return enc_str, '{0: <2}'.format(self.block_size - len(data))
 
     def decrypt(self, data):
+        """Decrypting the data given in blocks decided by the block size of the type.
+
+        :param data: Data to decrypt
+        :return: Decrypted data
+        """
         dec_str = ""
-        total_length = len(data)
         while len(data) >= self.block_size:
-            if self.UI:
-                self.UI.update_progress(len(data) - self.block_size, total_length)
             dec_str += self.encryption_imp.decrypt(data[0:self.block_size])
             data = data[self.block_size:]
-        if self.UI:
-            self.UI.update_progress(len(data), total_length)
+
         if len(data) >= 1:
             dec_str += self.encryption_imp.decrypt(str('{0: <' + str(self.block_size) + '}').format(data))
 
-        if self.UI:
-            self.UI.next_page()
         return dec_str
