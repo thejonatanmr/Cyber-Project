@@ -1,3 +1,8 @@
+import sys
+import os
+
+sys.path.append(os.getcwd() + "\\code\\libs")
+
 import tkMessageBox
 from Tkinter import *
 from ttk import *
@@ -5,15 +10,18 @@ import tkFileDialog
 from tkFont import *
 import Code.ClientSide as Cl
 import ConfigParser
+import os
 
 
 class GUIClass(Tk):
     """The main GUI class"""
+
     def __init__(self, *args, **kwargs):
         """Sets the initial variables values."""
         Tk.__init__(self, *args, **kwargs)
 
         self.title_font = Font(family='Helvetica', size=14, weight="bold")
+        self.file = ""
 
         container = Frame(self)
         container.pack(side="top", fill="both", expand=True)
@@ -33,7 +41,6 @@ class GUIClass(Tk):
 
             frame.grid(row=0, column=0, sticky="nsew")
 
-        self.file = ""
         self.client_side = Cl.ClientSide(self)
         self.show_frame("LoginPage")
 
@@ -57,6 +64,7 @@ class GUIClass(Tk):
 
 class LoginPage(Frame):
     """The class of the login page"""
+
     def __init__(self, parent, controller):
         """Sets the initial variables and the page layout
 
@@ -121,6 +129,7 @@ class LoginPage(Frame):
 
 class FilePage(Frame):
     """The class of the file page"""
+
     def __init__(self, parent, controller):
         """Sets the initial variables and the page layout
 
@@ -173,6 +182,7 @@ class FilePage(Frame):
 
 class EncDecPage(Frame):
     """The class for the Operation choosing page."""
+
     def __init__(self, parent, controller):
         """Sets the initial variables and the page layout
 
@@ -183,70 +193,72 @@ class EncDecPage(Frame):
         self.controller = controller
 
         self.operation = StringVar()
+        self.operation.set("encrypt")
         self.type = StringVar()
-
-        label = Label(self, text="Choose an operation", font=controller.title_font)
-        label.grid(column=0, row=0)
-
-        self.encryption_radio = Radiobutton(self, text="Encrypt", variable=self.operation, value="encrypt",
-                                            command=self.update_radio_encrypt)
-        self.encryption_radio.grid(column=0, row=1)
-
-        self.decrypt_radio = Radiobutton(self, text="Decrypt", variable=self.operation, value="decrypt",
-                                         command=self.update_radio_decrypt)
-        self.decrypt_radio.grid(column=1, row=1)
+        self.type.set("aes")
 
         label = Label(self, text="Choose a type of encryption", font=controller.title_font)
-        label.grid(column=0, row=2)
+        label.grid(column=0, row=0)
 
-        self.AES_radio = Radiobutton(self, text="AES", variable=self.type, value="aes", state="disabled")
-        self.AES_radio.grid(column=0, row=3)
+        self.AES_radio = Radiobutton(self, text="AES", variable=self.type, value="aes", state="active")
+        self.AES_radio.grid(column=0, row=1)
 
-        self.Builtin_radio = Radiobutton(self, text="BlowFish", variable=self.type, value="blowfish", state="disabled")
-        self.Builtin_radio.grid(column=0, row=4)
+        self.Builtin_radio = Radiobutton(self, text="BlowFish", variable=self.type, value="blowfish", state="normal")
+        self.Builtin_radio.grid(column=1, row=1)
 
         self.continue_button = Button(self, text="continue", command=self.continue_next_page)
-        self.continue_button.grid(column=1, row=5)
+        self.continue_button.grid(column=1, row=2)
 
-        self.return_button = Button(self, text="Return", command=self.return_page)
-        self.return_button.grid(column=0, row=5)
+        self.return_button = Button(self, text="back", command=self.return_page)
+        self.return_button.grid(column=0, row=2)
 
     def return_page(self):
         """Returns the the previous page"""
         self.controller.show_frame("FilePage")
 
-    def update_radio_encrypt(self):
-        """Updates the encryption type radio buttons to normal when the encryption option is active"""
-        self.Builtin_radio['state'] = "normal"
-        self.AES_radio['state'] = "normal"
-
-    def update_radio_decrypt(self):
-        """Updates the encryption type radio buttons to disabled when the decryption option is active"""
-        self.Builtin_radio['state'] = "disabled"
-        self.AES_radio['state'] = "disabled"
-
     def continue_next_page(self):
         """Continues to the next page and doing the chosen operation with the chosen type."""
         if self.operation.get() == "encrypt":
-            self.controller.client_side.encrypt(self.controller.file, self.type.get())
+            completed = self.controller.client_side.encrypt(self.controller.file, self.type.get())
+            if completed:
+                tkMessageBox.showinfo("Encryption successful", "Finished encrypting the file. \n\r The encrypted file "
+                                                               "path is '{}'".format(self.controller.file + ".jn"))
         else:
-            self.controller.client_side.decrypt(self.controller.file)
-        self.controller.show_frame("FinishPage")
+            completed = self.controller.client_side.decrypt(self.controller.file)
+            if completed:
+                tkMessageBox.showinfo("Decryption successful", "Finished decrypting the file. \n\r The decrypted file "
+                                                               "path is '{}'".format(self.controller.file[:-3]))
+        if completed:
+            self.controller.show_frame("FinishPage")
 
 
 class FinishPage(Frame):
     """The class for the finish page"""
+
     def __init__(self, parent, controller):
         Frame.__init__(self, parent)
         self.controller = controller
         label = Label(self, text="Finished", font=controller.title_font)
         label.grid(column=0, row=0)
 
-        finish_button = Button(self, text="Finish", command=self.start_again)
-        finish_button.grid(column=0, row=1)
+        finish_button = Button(self, text="Choose new file", command=self.start_again)
+        finish_button.grid(column=0, row=2)
+
+        open_folder_button = Button(self, text="Open resulted file in explorer", command=self.open_directory)
+        open_folder_button.grid(column=0, row=1)
 
         exit_button = Button(self, text="Exit", command=self.exit_ui)
-        exit_button.grid(column=1, row=1)
+        exit_button.grid(column=0, row=3)
+
+    def open_directory(self):
+        """Opens the resulted file directory"""
+        try:
+            path = "/".join(self.controller.file.split("/")[0:-1])
+            print path
+            os.startfile(path)
+        except Exception:
+            tkMessageBox.showerror("File error", "Could not find the folder '{}'".format(
+                "".join(self.controller.file.split("/")[0:-1])))
 
     def start_again(self):
         """Going back to the file page"""
@@ -261,4 +273,3 @@ class FinishPage(Frame):
 if __name__ == "__main__":
     app = GUIClass()
     app.mainloop()
-

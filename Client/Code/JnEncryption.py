@@ -1,5 +1,5 @@
 from Encryptions.Rijndael import Rijndael
-from Crypto.Cipher import Blowfish
+from Libs.Crypto.Cipher import Blowfish
 
 
 class JnEncryption:

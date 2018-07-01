@@ -16,9 +16,11 @@ class ThreadedServer(object):
         self.users_database = {}
         self.keys_database = {}
         self.sessions = {}
+        self.data_lock = threading.Lock()
 
     def listen(self):
         """Main server thread. waiting for new client connections and opening threads for each one"""
+        print "Server is running"
         self.initialise_json()
         self.server_socket.listen(5)
         while True:
@@ -27,6 +29,7 @@ class ThreadedServer(object):
             client = ssl.wrap_socket(new_socket, server_side=True, certfile="keys/server.crt",
                                      keyfile="keys/server.key")
             threading.Thread(target=self.listen_to_client, args=(client, address)).start()
+            print "Client Connected"
 
     def listen_to_client(self, client, address):
         """Main client thread loop. each client thread runs on this function."""
@@ -90,28 +93,34 @@ class ThreadedServer(object):
         return str(uuid.uuid4())
 
     def close_connection(self, client, data):
+        self.data_lock.acquire()
         """Closes connection with a client"""
         session = data["session"]
         if session:
             self.sessions.pop(session)
+        self.data_lock.release()
         client.shutdown(socket.SHUT_RDWR)
         client.close()
 
     def set_hash(self, client, data):
         """Sets the key in the database based on a file-id from the user."""
-        session = data["session"]
-        if session not in self.sessions:
-            self.send_user(client, self.phrase_output("failed", {"error": "you are not logged in"}))
-            return False
+        self.data_lock.acquire()
+        try:
+            session = data["session"]
+            if session not in self.sessions:
+                self.send_user(client, self.phrase_output("failed", {"error": "you are not logged in"}))
+                return False
 
-        user = self.sessions[session][0]
-        file_md5 = data["key-id"]
-        key_id = self.generate_key_id(session, file_md5)
-        key = self.users_database[user].pop("unsorted")
-        self.keys_database[key_id] = key, data["start_seg"], data["e_type"]
-        self.update_keys_json()
-        self.update_users_json()
-        self.send_user(client, self.phrase_output("ok", {"message": "IDed the key"}))
+            user = self.sessions[session][0]
+            file_md5 = data["key-id"]
+            key_id = self.generate_key_id(session, file_md5)
+            key = self.users_database[user].pop("unsorted")
+            self.keys_database[key_id] = key, data["start_seg"], data["e_type"]
+            self.update_keys_json()
+            self.update_users_json()
+            self.send_user(client, self.phrase_output("ok", {"message": "IDed the key"}))
+        finally:
+            self.data_lock.release()
 
     def generate_key_id(self, session, file_md5):
         """Formatting and making the file-id into key-id"""
@@ -124,77 +133,100 @@ class ThreadedServer(object):
 
     def delete_key(self, client, data):
         """Deletes key from the database based on the file-id given"""
-        session = data["session"]
-        if session not in self.sessions:
-            self.send_user(client, self.phrase_output("failed", {"error": "you are not logged in"}))
-            return False
+        self.data_lock.acquire()
+        try:
+            session = data["session"]
+            if session not in self.sessions:
+                self.send_user(client, self.phrase_output("failed", {"error": "you are not logged in"}))
+                return False
 
-        file_id = self.generate_key_id(session, data["key-id"])
-        if file_id in self.keys_database:
-            self.keys_database.pop(file_id)
-            self.send_user(client, self.phrase_output("ok"))
-            self.update_keys_json()
+            file_id = self.generate_key_id(session, data["key-id"])
+            if file_id in self.keys_database:
+                self.keys_database.pop(file_id)
+                self.send_user(client, self.phrase_output("ok"))
+                self.update_keys_json()
+        finally:
+            self.data_lock.release()
 
     def generate_new_key(self, client, data):
         """generates new key from a specific type and sends user"""
-        session = data["session"]
-        if session not in self.sessions:
-            self.send_user(client, self.phrase_output("failed", {"error": "you are not logged in"}))
-            return False
+        self.data_lock.acquire()
+        try:
+            session = data["session"]
+            if session not in self.sessions:
+                self.send_user(client, self.phrase_output("failed", {"error": "you are not logged in"}))
+                return False
 
-        user = self.sessions[session][0]
+            user = self.sessions[session][0]
 
-        key = self.generate_random_key(data["e_type"])
-        if key == False:
-            self.send_user(client, self.phrase_output("failed", {"error": "Could not detect encyption type"}))
-            return False
+            key = self.generate_random_key(data["e_type"])
+            if key == False:
+                self.send_user(client, self.phrase_output("failed", {"error": "Could not detect encyption type"}))
+                return False
 
-        self.users_database[user]["unsorted"] = key
-        self.send_user(client, self.phrase_output("key", {"key": key}))
-        self.update_users_json()
+            self.users_database[user]["unsorted"] = key
+            self.send_user(client, self.phrase_output("key", {"key": key}))
+            self.update_users_json()
+        finally:
+            self.data_lock.release()
 
     def get_key_with_id(self, client, data):
         """Gets file-id and sends the corresponding key to the client"""
-        session = data["session"]
-        if session not in self.sessions:
-            self.send_user(client, self.phrase_output("failed", {"error": "you are not logged in"}))
-            return False
+        self.data_lock.acquire()
+        try:
+            session = data["session"]
+            if session not in self.sessions:
+                self.send_user(client, self.phrase_output("failed", {"error": "you are not logged in"}))
+                return False
 
-        file_id = self.generate_key_id(session, data["key-id"])
-        if file_id in self.keys_database:
-            key = self.keys_database[file_id]
-            self.send_user(client, self.phrase_output("key", {"key": key[0], "start_seg": key[1], "e_type": key[2]}))
+            file_id = self.generate_key_id(session, data["key-id"])
+            if file_id in self.keys_database:
+                key = self.keys_database[file_id]
+                self.send_user(client, self.phrase_output("key", {"key": key[0], "start_seg": key[1], "e_type": key[2]}))
 
-        else:
-            self.send_user(client, self.phrase_output("failed", {"error": "key not found"}))
+            else:
+                self.send_user(client, self.phrase_output("failed", {"error": "key not found"}))
+        finally:
+            self.data_lock.release()
 
     def login(self, client, data):
         """Checks the integrity of username and password of the user.
         makes a new session if ok, sends the user the new session.
         """
-        if data["user"] in self.users_database:
-            if self.md5_string(data["password"]) == self.users_database[data["user"]]["password"]:
-                session = self.random_id()
-                self.sessions[session] = data["user"], data["password"]
-                self.send_user(client, self.phrase_output("ok", {"session id": session}))
-        else:
-            self.send_user(client,
-                           self.phrase_output("failed", {"error": "bad login. the username or password were wrong"}))
+        self.data_lock.acquire()
+        try:
+            if data["user"] in self.users_database:
+                if self.md5_string(data["password"]) == self.users_database[data["user"]]["password"]:
+                    session = self.random_id()
+                    self.sessions[session] = data["user"], data["password"]
+                    self.send_user(client, self.phrase_output("ok", {"session id": session}))
+                else:
+                    self.send_user(client, self.phrase_output("failed", {"error": "bad login. the username or "
+                                                                                  "password were wrong"}))
+            else:
+                self.send_user(client,
+                               self.phrase_output("failed", {"error": "bad login. the username or password were wrong"}))
+        finally:
+            self.data_lock.release()
 
     def new_user(self, client, data):
         """Checks the integrity of new username and password.
         saves the username and md5 of the password if ok.
         """
-        if data["user"] in self.users_database:
-            self.send_user(client, self.phrase_output("failed", {"error": "user exists"}))
+        self.data_lock.acquire()
+        try:
+            if data["user"] in self.users_database:
+                self.send_user(client, self.phrase_output("failed", {"error": "user exists"}))
 
-        elif len(data["password"]) <= 3:
-            self.send_user(client, self.phrase_output("failed", {"error": "password is too short"}))
+            elif len(data["password"]) <= 3:
+                self.send_user(client, self.phrase_output("failed", {"error": "password is too short"}))
 
-        else:
-            self.users_database[data["user"]] = {"password": self.md5_string(data["password"])}
-            self.send_user(client, self.phrase_output("ok", {"message": "made new account"}))
-            self.update_users_json()
+            else:
+                self.users_database[data["user"]] = {"password": self.md5_string(data["password"])}
+                self.send_user(client, self.phrase_output("ok", {"message": "made new account"}))
+                self.update_users_json()
+        finally:
+            self.data_lock.release()
 
     @staticmethod
     def md5_string(string):

@@ -50,7 +50,7 @@ class ClientSide:
         """
         global PROGRAM_V, PROGRAM_ID
         with open(file_path, "rb") as my_file:
-            data = my_file.readline()
+            data = my_file.read(8)
         ID = data[0:4]
         V = data[4:8]
 
@@ -113,8 +113,8 @@ class ClientSide:
                 enc = JnEncryption(curr_key, type_id)
 
             except RuntimeError:
-                self.UI.raise_error_box("error", "Unknown encryption type", move_frame=True, frame='FinishPage')
-                return
+                self.UI.raise_error_box("error", "Unknown encryption type", move_frame=True, frame='EncDecPage')
+                return False
 
             with open(e_file, "rb") as my_file:
                 data = my_file.read()
@@ -138,20 +138,22 @@ class ClientSide:
                                     "data": {"key-id": key_id, "start_seg": b64_start,
                                              "e_type": type_id, "session": self.session}}))
                 except RuntimeError:
-                    self.UI.raise_error_box("error", "Unknown encryption type", move_frame=True, frame='FinishPage')
-                    return
+                    self.UI.raise_error_box("error", "Unknown encryption type", move_frame=True, frame='EncDecPage')
+                    return False
 
                 json_data = self.ssl_socket.read()
                 data = json.loads(json_data)
                 if data["op"] == "ok":
                     with open(e_file + ".jn", "wb") as my_file:
                         my_file.write(headed_encrypted_data + added_length)
-                    break
+                    return True
         else:
             if "error" in data["data"]:
-                self.UI.raise_error_box("error", data["data"]["error"], move_frame=True, frame='FinishPage')
+                self.UI.raise_error_box("error", data["data"]["error"], move_frame=True, frame='EncDecPage')
+                return False
             else:
-                self.UI.raise_error_box("error", "Unknown error", move_frame=True, frame='FinishPage')
+                self.UI.raise_error_box("error", "Unknown error", move_frame=True, frame='EncDecPage')
+                return False
 
     def decrypt(self, d_file):
         """Reading and decrypting a given file. the decryption type and the key is given by the server.
@@ -163,8 +165,8 @@ class ClientSide:
         global PROGRAM_ID, PROGRAM_V
 
         if d_file[-3:] != ".jn":
-            self.UI.raise_error_box("File error", "The file type is not '.jn'. can not decrypt this file")
-            return
+            self.UI.raise_error_box("File error", "The file type is not '.jn'. can not decrypt this file", move_frame=True, frame='EncDecPage')
+            return False
 
         with open(d_file, "rb") as encrypted_file:
             headed_encrypted_data = encrypted_file.read()
@@ -188,8 +190,8 @@ class ClientSide:
                 dec = JnEncryption(key, data["data"]["e_type"])
 
             except RuntimeError:
-                self.UI.raise_error_box("error", "Unknown encryption type", move_frame=True, frame='FinishPage')
-                return
+                self.UI.raise_error_box("error", "Unknown encryption type", move_frame=True, frame='FilePage')
+                return False
 
             ID = headed_encrypted_data[0:4]
             V = headed_encrypted_data[4:8]
@@ -214,17 +216,20 @@ class ClientSide:
                     json_data = self.ssl_socket.read()
                     data = json.loads(json_data)
                     if data["op"] == "ok":
-                        break
+                        return True
             else:
                 self.UI.raise_error_box("File error", "Could not detect the file as an encrypted file", move_frame=True,
-                                        frame="FinishPage")
+                                        frame="FilePage")
+                return False
 
 
         else:
             if "error" in data["data"]:
-                self.UI.raise_error_box("error", data["data"]["error"], move_frame=True, frame='FinishPage')
+                self.UI.raise_error_box("error", data["data"]["error"], move_frame=True, frame='FilePage')
+                return False
             else:
-                self.UI.raise_error_box("error", "Unknown error", move_frame=True, frame='FinishPage')
+                self.UI.raise_error_box("error", "Unknown error", move_frame=True, frame='FilePage')
+                return False
 
     def exit(self):
         """closing the communication with the server and the socket."""
